@@ -1,3 +1,4 @@
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:ecommerce_app_api_26/features/auth/presentation/screens/signup_screen.dart';
 import 'package:ecommerce_app_api_26/features/main_wrapper/presentation/screens/main_wrapper.dart';
@@ -23,7 +24,8 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 
   void _login() async {
-    if (_formKey.currentState!.validate()) {
+    if (_formKey.currentState!.validate() &&
+        FirebaseAuth.instance.currentUser!.emailVerified) {
       try {
         await AuthFirebase().signIn(
           _emailController.text,
