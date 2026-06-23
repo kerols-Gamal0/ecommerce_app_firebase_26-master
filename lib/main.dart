@@ -4,8 +4,9 @@ import 'package:flutter/material.dart';
 import 'package:ecommerce_app_api_26/utils/app_theme.dart';
 
 void main() async {
-  runApp(const MyApp());
+  WidgetsFlutterBinding.ensureInitialized();
   await Firebase.initializeApp();
+  runApp(const MyApp());
 }
 
 class MyApp extends StatelessWidget {

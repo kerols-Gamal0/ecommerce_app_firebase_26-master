@@ -1,24 +1,102 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:ecommerce_app_api_26/features/home/presentation/widgets/product_card.dart';
 
-class HomeScreen extends StatelessWidget {
+class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
 
   @override
+  State<HomeScreen> createState() => _HomeScreenState();
+}
+
+class _HomeScreenState extends State<HomeScreen> {
+  late CollectionReference<Map<String, dynamic>> productsReference;
+
+  @override
+  void initState() {
+    super.initState();
+    getProducts();
+  }
+
+  void getProducts() {
+    productsReference = FirebaseFirestore.instance.collection('products');
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final List<Map<String, dynamic>> dummyProducts = List.generate(
-      10,
-      (index) => {
-        'id': index,
-        'title': 'Product ${index + 1}',
-        'description': 'Modern design for daily life',
-        'price': (index + 1) * 20.0,
-        'image': 'https://via.placeholder.com/150',
-      },
-    );
+    TextEditingController _nameController = TextEditingController(),
+        _descriptionController = TextEditingController(),
+        _priceController = TextEditingController(),
+        _imageUrlController = TextEditingController();
 
     return Scaffold(
       backgroundColor: Colors.grey.shade50,
+      floatingActionButton: FloatingActionButton(
+        child: const Icon(Icons.add),
+        onPressed: () {
+          showDialog(
+            context: context,
+            builder: (BuildContext dialogContext) => AlertDialog(
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  TextField(
+                    controller: _nameController,
+                    decoration: const InputDecoration(labelText: "Name"),
+                  ),
+                  const SizedBox(height: 10),
+                  TextField(
+                    controller: _descriptionController,
+                    decoration: const InputDecoration(labelText: "Description"),
+                  ),
+                  const SizedBox(height: 10),
+                  TextField(
+                    controller: _priceController,
+                    keyboardType: TextInputType.number,
+                    decoration: const InputDecoration(labelText: "Price"),
+                  ),
+                  const SizedBox(height: 10),
+                  TextField(
+                    controller: _imageUrlController,
+                    decoration: const InputDecoration(labelText: "Image Url"),
+                  ),
+                  const SizedBox(height: 15),
+                  ElevatedButton(
+                    onPressed: () async {
+                      if (_nameController.text.isEmpty ||
+                          _priceController.text.isEmpty) {
+                        return;
+                      }
+
+                      final name = _nameController.text;
+                      final description = _descriptionController.text;
+                      final price =
+                          double.tryParse(_priceController.text) ?? 0.0;
+                      final imageUrl = _imageUrlController.text;
+
+                      if (context.mounted) {
+                        Navigator.pop(dialogContext);
+                      }
+
+                      await productsReference.add({
+                        "name": name,
+                        "description": description,
+                        "price": price,
+                        "image": imageUrl,
+                      });
+                      _nameController.clear();
+                      _descriptionController.clear();
+                      _priceController.clear();
+                      _imageUrlController.clear();
+                    },
+                    child: const Text("Add Product"),
+                  ),
+                ],
+              ),
+            ),
+          );
+        },
+      ),
       appBar: AppBar(
         backgroundColor: Colors.white,
         elevation: 0,
@@ -29,8 +107,18 @@ class HomeScreen extends StatelessWidget {
             Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('Welcome,', style: TextStyle(color: Colors.grey.shade600, fontSize: 14)),
-                const Text('Our Shop', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 22, color: Colors.black)),
+                Text(
+                  'Welcome,',
+                  style: TextStyle(color: Colors.grey.shade600, fontSize: 14),
+                ),
+                const Text(
+                  'Our Shop',
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 22,
+                    color: Colors.black,
+                  ),
+                ),
               ],
             ),
             Container(
@@ -49,7 +137,6 @@ class HomeScreen extends StatelessWidget {
       body: SingleChildScrollView(
         child: Column(
           children: [
-            // Search Bar
             Padding(
               padding: const EdgeInsets.all(16.0),
               child: Container(
@@ -62,7 +149,7 @@ class HomeScreen extends StatelessWidget {
                       color: Colors.black.withOpacity(0.05),
                       blurRadius: 10,
                       offset: const Offset(0, 5),
-                    )
+                    ),
                   ],
                 ),
                 child: const TextField(
@@ -74,7 +161,6 @@ class HomeScreen extends StatelessWidget {
                 ),
               ),
             ),
-            // Categories
             SingleChildScrollView(
               scrollDirection: Axis.horizontal,
               padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -83,7 +169,10 @@ class HomeScreen extends StatelessWidget {
                   bool isAll = cat == 'All';
                   return Container(
                     margin: const EdgeInsets.only(right: 12),
-                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 20,
+                      vertical: 10,
+                    ),
                     decoration: BoxDecoration(
                       color: isAll ? Colors.blue : Colors.white,
                       borderRadius: BorderRadius.circular(12),
@@ -92,7 +181,7 @@ class HomeScreen extends StatelessWidget {
                           BoxShadow(
                             color: Colors.black.withOpacity(0.05),
                             blurRadius: 5,
-                          )
+                          ),
                       ],
                     ),
                     child: Text(
@@ -106,26 +195,49 @@ class HomeScreen extends StatelessWidget {
                 }).toList(),
               ),
             ),
-            // Products Grid
             Padding(
               padding: const EdgeInsets.all(16.0),
-              child: GridView.builder(
-                shrinkWrap: true,
-                physics: const NeverScrollableScrollPhysics(),
-                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                  crossAxisCount: 2,
-                  childAspectRatio: 0.7,
-                  crossAxisSpacing: 16,
-                  mainAxisSpacing: 16,
-                ),
-                itemCount: dummyProducts.length,
-                itemBuilder: (context, index) {
-                  final product = dummyProducts[index];
-                  return ProductCard(
-                    title: product['title'],
-                    price: product['price'],
-                    description: product['description'],
-                    image: product['image'],
+              child: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+                stream: productsReference.snapshots(),
+                builder: (context, asyncSnapshot) {
+                  if (asyncSnapshot.connectionState ==
+                      ConnectionState.waiting) {
+                    return const Center(child: CircularProgressIndicator());
+                  }
+
+                  if (asyncSnapshot.hasError) {
+                    return Center(child: Text("Error: ${asyncSnapshot.error}"));
+                  }
+
+                  if (!asyncSnapshot.hasData ||
+                      asyncSnapshot.data!.docs.isEmpty) {
+                    return const Center(child: Text("No products found"));
+                  }
+
+                  return GridView.builder(
+                    shrinkWrap: true,
+                    physics: const NeverScrollableScrollPhysics(),
+                    gridDelegate:
+                        const SliverGridDelegateWithFixedCrossAxisCount(
+                          crossAxisCount: 2,
+                          childAspectRatio: 0.7,
+                          crossAxisSpacing: 16,
+                          mainAxisSpacing: 16,
+                        ),
+                    itemCount: asyncSnapshot.data!.docs.length,
+                    itemBuilder: (context, index) {
+                      final product = asyncSnapshot.data!.docs[index].data();
+                      return ProductCard(
+                        title: product['name'] ?? 'No Name',
+                        price: (product['price'] is num)
+                            ? (product['price'] as num).toDouble()
+                            : 0.0,
+                        description: product['description'] ?? '',
+                        image:
+                            product['image'] ??
+                            'https://via.placeholder.com/150',
+                      );
+                    },
                   );
                 },
               ),
