@@ -1,4 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:ecommerce_app_api_26/features/home/presentation/widgets/product_card.dart';
 
@@ -16,10 +17,27 @@ class _HomeScreenState extends State<HomeScreen> {
   void initState() {
     super.initState();
     getProducts();
+    getFavorites();
   }
 
   void getProducts() {
     productsReference = FirebaseFirestore.instance.collection('products');
+  }
+
+  late List<dynamic> favorites;
+  bool loading = true;
+  void getFavorites() async {
+    String userId = FirebaseAuth.instance.currentUser!.uid;
+    favorites = await FirebaseFirestore.instance
+        .collection('user')
+        .doc(userId)
+        .get()
+        .then((snapshot) {
+          return snapshot.get('favorites') as List<dynamic>;
+        });
+    setState(() {
+      loading = false;
+    });
   }
 
   @override
@@ -201,7 +219,8 @@ class _HomeScreenState extends State<HomeScreen> {
                 stream: productsReference.snapshots(),
                 builder: (context, asyncSnapshot) {
                   if (asyncSnapshot.connectionState ==
-                      ConnectionState.waiting) {
+                          ConnectionState.waiting ||
+                      loading) {
                     return const Center(child: CircularProgressIndicator());
                   }
 
@@ -228,6 +247,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     itemBuilder: (context, index) {
                       final product = asyncSnapshot.data!.docs[index].data();
                       return ProductCard(
+                        id: asyncSnapshot.data!.docs[index].id,
                         title: product['name'] ?? 'No Name',
                         price: (product['price'] is num)
                             ? (product['price'] as num).toDouble()
@@ -236,6 +256,9 @@ class _HomeScreenState extends State<HomeScreen> {
                         image:
                             product['image'] ??
                             'https://via.placeholder.com/150',
+                        isFavorite: favorites.contains(
+                          asyncSnapshot.data!.docs[index].id,
+                        ),
                       );
                     },
                   );

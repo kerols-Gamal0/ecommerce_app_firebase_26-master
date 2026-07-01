@@ -1,132 +1,275 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
-class CartScreen extends StatelessWidget {
+class CartScreen extends StatefulWidget {
   const CartScreen({super.key});
 
   @override
-  Widget build(BuildContext context) {
-    final List<Map<String, dynamic>> cartItems = List.generate(3, (index) => {
-      'title': 'Premium Product ${index + 1}',
-      'price': (index + 1) * 35.0,
-      'quantity': 1,
-    });
+  State<CartScreen> createState() => _CartScreenState();
+}
 
+class _CartScreenState extends State<CartScreen> {
+  List<dynamic> cartItems = [];
+  bool loading = true;
+  @override
+  void initState() {
+    super.initState();
+    getCartItems();
+  }
+
+  void getCartItems() async {
+    if (FirebaseAuth.instance.currentUser == null) return;
+    String userId = FirebaseAuth.instance.currentUser!.uid;
+
+    try {
+      var snapshot = await FirebaseFirestore.instance
+          .collection('user')
+          .doc(userId)
+          .get();
+
+      if (snapshot.exists &&
+          snapshot.data() != null &&
+          snapshot.data()!.containsKey('cart')) {
+        setState(() {
+          cartItems = snapshot.get('cart') as List<dynamic>;
+          loading = false;
+        });
+      } else {
+        setState(() {
+          cartItems = [];
+          loading = false;
+        });
+      }
+    } catch (e) {
+      print("Error fetching cart: $e");
+      setState(() {
+        loading = false;
+      });
+    }
+  }
+
+  void updateQuantity(String productId, int newQuantity) async {
+    String userId = FirebaseAuth.instance.currentUser!.uid;
+
+    if (newQuantity < 1) {
+      cartItems.removeWhere((item) => item['productId'] == productId);
+    } else {
+      int index = cartItems.indexWhere(
+        (item) => item['productId'] == productId,
+      );
+      if (index != -1) {
+        cartItems[index]['quantity'] = newQuantity;
+      }
+    }
+
+    setState(() {});
+
+    await FirebaseFirestore.instance.collection('user').doc(userId).update({
+      'cart': cartItems,
+    });
+  }
+
+  double calculateTotal() {
+    double total = 0.0;
+    for (var item in cartItems) {
+      double price = (item['price'] is num)
+          ? (item['price'] as num).toDouble()
+          : 0.0;
+      int quantity = item['quantity'] as int;
+      total += (price * quantity);
+    }
+    return total;
+  }
+
+  @override
+  Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.grey.shade50,
       appBar: AppBar(
-        title: const Text('My Cart', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.black)),
+        title: const Text(
+          'My Cart',
+          style: TextStyle(fontWeight: FontWeight.bold, color: Colors.black),
+        ),
         backgroundColor: Colors.transparent,
         elevation: 0,
         centerTitle: true,
       ),
-      body: Column(
-        children: [
-          Expanded(
-            child: ListView.builder(
-              padding: const EdgeInsets.all(16),
-              itemCount: cartItems.length,
-              itemBuilder: (context, index) {
-                final item = cartItems[index];
-                return Container(
-                  margin: const EdgeInsets.only(bottom: 16),
-                  padding: const EdgeInsets.all(12),
+      body: loading
+          ? const Center(child: CircularProgressIndicator())
+          : cartItems.isEmpty
+          ? const Center(
+              child: Text(
+                'Your cart is empty',
+                style: TextStyle(fontSize: 16, color: Colors.grey),
+              ),
+            )
+          : Column(
+              children: [
+                Expanded(
+                  child: ListView.builder(
+                    padding: const EdgeInsets.all(16),
+                    itemCount: cartItems.length,
+                    itemBuilder: (context, index) {
+                      final item = cartItems[index];
+                      return Container(
+                        margin: const EdgeInsets.only(bottom: 16),
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(15),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withOpacity(0.05),
+                              blurRadius: 10,
+                              offset: const Offset(0, 5),
+                            ),
+                          ],
+                        ),
+                        child: Row(
+                          children: [
+                            Container(
+                              width: 80,
+                              height: 80,
+                              decoration: BoxDecoration(
+                                color: Colors.blue.shade50,
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              child: item['image'] != null
+                                  ? ClipRRect(
+                                      borderRadius: BorderRadius.circular(12),
+                                      child: Image.network(
+                                        item['image'],
+                                        fit: BoxFit.cover,
+                                      ),
+                                    )
+                                  : const Icon(
+                                      Icons.shopping_bag_outlined,
+                                      color: Colors.blue,
+                                      size: 30,
+                                    ),
+                            ),
+                            const SizedBox(width: 16),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    item['title'] ?? 'Product',
+                                    style: const TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 16,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    '\$${item['price']}',
+                                    style: const TextStyle(
+                                      color: Colors.blue,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            Row(
+                              children: [
+                                _buildQtyBtn(Icons.remove, () {
+                                  updateQuantity(
+                                    item['productId'],
+                                    item['quantity'] - 1,
+                                  );
+                                }),
+                                Padding(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 8,
+                                  ),
+                                  child: Text(
+                                    '${item['quantity']}',
+                                    style: const TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                ),
+                                _buildQtyBtn(Icons.add, () {
+                                  updateQuantity(
+                                    item['productId'],
+                                    item['quantity'] + 1,
+                                  );
+                                }),
+                              ],
+                            ),
+                          ],
+                        ),
+                      );
+                    },
+                  ),
+                ),
+                Container(
+                  padding: const EdgeInsets.all(24),
                   decoration: BoxDecoration(
                     color: Colors.white,
-                    borderRadius: BorderRadius.circular(15),
+                    borderRadius: const BorderRadius.vertical(
+                      top: Radius.circular(30),
+                    ),
                     boxShadow: [
                       BoxShadow(
                         color: Colors.black.withOpacity(0.05),
                         blurRadius: 10,
-                        offset: const Offset(0, 5),
-                      )
+                        offset: const Offset(0, -5),
+                      ),
                     ],
                   ),
-                  child: Row(
+                  child: Column(
                     children: [
-                      Container(
-                        width: 80,
-                        height: 80,
-                        decoration: BoxDecoration(
-                          color: Colors.blue.shade50,
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: const Icon(Icons.shopping_bag_outlined, color: Colors.blue, size: 30),
-                      ),
-                      const SizedBox(width: 16),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              item['title'],
-                              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
-                            ),
-                            const SizedBox(height: 4),
-                            Text(
-                              '\$${item['price']}',
-                              style: const TextStyle(color: Colors.blue, fontWeight: FontWeight.bold),
-                            ),
-                          ],
-                        ),
-                      ),
                       Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                          _buildQtyBtn(Icons.remove, () {}),
-                          Padding(
-                            padding: const EdgeInsets.symmetric(horizontal: 8),
-                            child: Text('${item['quantity']}', style: const TextStyle(fontWeight: FontWeight.bold)),
+                          Text(
+                            'Total Amount',
+                            style: TextStyle(
+                              color: Colors.grey.shade600,
+                              fontSize: 16,
+                            ),
                           ),
-                          _buildQtyBtn(Icons.add, () {}),
+                          Text(
+                            '\$${calculateTotal().toStringAsFixed(1)}',
+                            style: const TextStyle(
+                              fontSize: 22,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.blue,
+                            ),
+                          ),
                         ],
                       ),
+                      const SizedBox(height: 20),
+                      SizedBox(
+                        width: double.infinity,
+                        height: 60,
+                        child: ElevatedButton(
+                          onPressed: () {},
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.blue,
+                            foregroundColor: Colors.white,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(15),
+                            ),
+                            elevation: 0,
+                          ),
+                          child: const Text(
+                            'Checkout',
+                            style: TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ),
+                      ),
                     ],
                   ),
-                );
-              },
-            ),
-          ),
-          Container(
-            padding: const EdgeInsets.all(24),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: const BorderRadius.vertical(top: Radius.circular(30)),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withOpacity(0.05),
-                  blurRadius: 10,
-                  offset: const Offset(0, -5),
-                )
-              ],
-            ),
-            child: Column(
-              children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text('Total Amount', style: TextStyle(color: Colors.grey.shade600, fontSize: 16)),
-                    const Text('\$210.0', style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: Colors.blue)),
-                  ],
-                ),
-                const SizedBox(height: 20),
-                SizedBox(
-                  width: double.infinity,
-                  height: 60,
-                  child: ElevatedButton(
-                    onPressed: () {},
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.blue,
-                      foregroundColor: Colors.white,
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
-                      elevation: 0,
-                    ),
-                    child: const Text('Checkout', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-                  ),
                 ),
               ],
             ),
-          ),
-        ],
-      ),
     );
   }
 
